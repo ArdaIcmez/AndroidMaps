@@ -31,6 +31,7 @@ import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
@@ -44,13 +45,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private static final float MIN_DISTANCE_CHANGE_FOR_UPDATES = 0.1f; // 1 meter
     private static final long MIN_TIME_BW_UPDATES = 1000*3; // 3 seconds
 
-    //User default settings
-    private int defaultColor = Color.RED;
-    private int defaultWidth = 5;
-
     //User personal settings
     private UserDrawing thisUser;
-    private List<UserDrawing> drawingList = new ArrayList<>();
+    private HashMap<String,UserDrawing> drawingList = new HashMap<String,UserDrawing>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -71,7 +68,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     }
 
-    //Always called after google maps initialization
+    //GPS and permission functions
     private void promptGPS() {
         Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
         startActivity(intent);
@@ -81,6 +78,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION},
                 1);
     }
+
+    //Initialize location and drawing
     private void getInitLocation(){
         if(ContextCompat.checkSelfPermission( this, android.Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED)
@@ -119,15 +118,34 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         PolylineOptions lineOptions = new PolylineOptions().width(thisUser.getSelfWidth())
                 .color(thisUser.getSelfColor());
         thisUser.setSelfDrawing(mMap.addPolyline(lineOptions));
-        drawingList.add(thisUser);
+        drawingList.put(thisUser.getNickname(),thisUser);
 
     }
+
+    //Multiplayer user functions
     private void addUser(UserDrawing drawing){
         PolylineOptions lineOptions = new PolylineOptions().width(drawing.getSelfWidth()).
                 color(drawing.getSelfColor());
         drawing.setSelfDrawing(mMap.addPolyline(lineOptions));
-        drawingList.add(drawing);
+        drawingList.put(drawing.getNickname(),drawing);
     }
+    private void updateDrawing(String userName, List<LatLng> points)  {
+        UserDrawing k = drawingList.get(userName);
+        List<LatLng> oldPoints = k.getSelfDrawing().getPoints();
+        for(LatLng p : points)  {
+            oldPoints.add(p);
+        }
+        k.setDrawingPoints(oldPoints);
+        drawingList.put(userName,k);
+    }
+    private void removeUser(String userName){
+        UserDrawing l = drawingList.get(userName);
+        for(Polyline p : l.getSelfDrawings()){
+            p.remove();
+        }
+        drawingList.remove(userName);
+    }
+    //UI functions
     public void drawPressed(View view){
         thisUser.setIsDrawing(!thisUser.isDrawing());
         if(thisUser.isDrawing()){
@@ -152,6 +170,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         //TODO : Send new status to server
     }
+
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
@@ -160,6 +179,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         //Zoom camera
         CameraUpdate zoom=CameraUpdateFactory.zoomTo(mMap.getMaxZoomLevel()-3);
         mMap.animateCamera(zoom);
+
+        // -------------------TEST-------------------------------
+        UserDrawing testUser= new UserDrawing(5,Color.GREEN,"test");
+        addUser(testUser);
+
+        //-------------------------------------------------------
 
         gpsLocationListener =new LocationListener(){
 
@@ -190,6 +215,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     thisUser.setDrawingPoints(points);
                 }
 
+                // -------------------TEST-------------------------------
+                List<LatLng> lk = new ArrayList<>();
+                lk.add(new LatLng(location.getLatitude()+0.5,location.getLongitude()+0.5));
+                updateDrawing("test",lk);
+
+                //-------------------------------------------------------
+
                 lastLocation = location;
                 //mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(lastLocation.getLatitude(),
                 //        lastLocation.getLongitude())));
@@ -211,8 +243,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         private String nickname;
         private int selfColor ;
         private int selfWidth;
-        private List<Polyline> selfDrawings;
-        private Polyline selfDrawing;
+        private List<Polyline> selfDrawings; //Because more than 1 polyline
+        private Polyline selfDrawing; //Current polyline that the user is drawing
         private boolean isDrawing;
 
         public UserDrawing(int width,int color, String nickname ){
